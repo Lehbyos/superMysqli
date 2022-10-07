@@ -1,0 +1,14 @@
+{
+    "name": "lehbyos/super-mysqli",
+    "description": "Utility class, wrapping common patterns in data processing when querying databases with mysqli",
+    "type": "library",
+    "require": {
+        "ext-mysqli": "^7.4"
+    },
+    "authors": [
+        {
+            "name": "Alejandro Sandoval Véjar",
+            "email": "jano.sandoval.vejar@gmail.com"
+        }
+    ]
+}
