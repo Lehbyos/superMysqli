@@ -7,13 +7,22 @@ namespace supermysqli;
  */
 class DatabaseConnection
 {
-    /** @var mysqli */
-    public $mysqli = null;
+    private static $connections = [];
+    private static $defaultConnection = 'default';
+
+    public static function configConnection(string $host, string $dbName, string $user, string $password, string $alias = 'default'){
+        if (isset(self::$connections[$alias]))
+            throw new Exception("Connection alias already exists");
+
+        self::$connections[$alias] = new DatabaseConnection($host, $dbName, $user, $password);
+        if (count(self::$connections) == 1)
+            self::$defaultConnection = $alias;
+    }
 
     /**
      * @throws Exception
      */
-    public function __construct(string $host, string $dbName, string $user, string $password){
+    private function __construct(string $host, string $dbName, string $user, string $password){
         $this->connect($host, $dbName, $user, $password);
     }
 
@@ -23,7 +32,7 @@ class DatabaseConnection
      * Se deben completar los parametros para conexion
      * @throws Exception
      */
-    public function connect(string $server, string $database, string $user, string $password)
+    private function connect(string $server, string $database, string $user, string $password)
     {
         try {
             $this->mysqli = new mysqli($server, $user, $password, $database);
@@ -36,7 +45,7 @@ class DatabaseConnection
     }
 
     // Close database connection
-    public function close()
+    private function close()
     {
         if ($this->mysqli !== null){
             $this->mysqli->close();
@@ -49,19 +58,16 @@ class DatabaseConnection
         $this->close();
     }
 
-    // Prepares a SQL query
-    public function Prepare($qry)
-    {
-        return $this->mysqli->prepare($qry);
+    /** @var mysqli */
+    public $mysqli = null;
+
+    public static function getInstance(string $alias = 'default'){
+        if (isset(self::$connections[$alias]))
+            return self::$connections[$alias];
+        throw new Exception('DatabaseConnection instance with alias "' . $alias . '" not found');
     }
 
-    // Runs a sql query
-    public function runQuery($qry)
-    {
-        return $this->mysqli->query($qry);
-    }
-
-    // Turns autocommit on/off for transactions
+// Turns autocommit on/off for transactions
     public function autoCommit($mode)
     {
         $this->mysqli->autocommit($mode);
@@ -79,23 +85,10 @@ class DatabaseConnection
         $this->mysqli->rollback();
     }
 
-
-
-    // Escape the string get ready to insert or update
-    public function clearText($text): string
-    {
-        return $this->mysqli->real_escape_string(trim($text));
-    }
-
     // Get the last insert id
     public function lastID()
     {
         return $this->mysqli->insert_id;
-    }
-
-    public function isAutocommit(): bool {
-        $status = $this->singleValueQuery('select @@autocommit');
-        return ($status == 1);
     }
 
     /**
