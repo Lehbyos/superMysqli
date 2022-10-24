@@ -79,7 +79,7 @@ class DatabaseConnection
         throw new Exception('DatabaseConnection instance with alias "' . $alias . '" not found');
     }
 
-// Turns autocommit on/off for transactions
+    // Turns autocommit on/off for transactions
     public function autoCommit($mode)
     {
         $this->mysqli->autocommit($mode);
@@ -104,10 +104,8 @@ class DatabaseConnection
     }
 
     /**
-     * Procesa los parámetros recibidos.
-     * Procesar los parámetros los convierte en un array, que sería el listado de parámetros requeridos
-     * por la función bind_param() de mysqli.
-     * @param array|null $params Array de parámetros a procesar
+     * Process received parameters, mapping it to the required array by the mysqli's bind_param() function.
+     * @param array|null $params Array of parameters to process
      * @return array
      */
     protected function processParameters(?array $params): array
