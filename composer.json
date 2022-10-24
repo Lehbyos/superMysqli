@@ -14,8 +14,8 @@
         }
     ],
     "autoload": {
-        "psr-4": {
-            "supermysqli\\": "src"
+        "psr-0": {
+            "supermysqli": "src/"
         }
     }
 }
