@@ -3,6 +3,7 @@
     "description": "Utility class, wrapping common patterns in data processing when querying databases with mysqli",
     "type": "library",
     "license": "GPL-3.0-only",
+    "version": "0.1",
     "require": {
         "ext-mysqli": "^7.3"
     },
