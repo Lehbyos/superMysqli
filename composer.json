@@ -2,8 +2,9 @@
     "name": "lehbyos/super-mysqli",
     "description": "Utility class, wrapping common patterns in data processing when querying databases with mysqli",
     "type": "library",
+    "license": "GPL-3.0-only",
     "require": {
-        "ext-mysqli": "^7.4"
+        "ext-mysqli": "^7.3"
     },
     "authors": [
         {
