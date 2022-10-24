@@ -67,16 +67,17 @@ class DatabaseConnection
             throw new \Exception('Connection Error: ' . $e->getMessage() . "\n" . $server . ' -- ' . $database . ' - ' . $user . ' - ' . $password);
         }
         if ($this->mysqli->connect_errno)
-            throw new \Exception("Error connectin to MySQL/MariaDB: (" . $this->mysqli->connect_errno . ") " . $this->mysqli->connect_error);
+            throw new \Exception("Error connecting to MySQL/MariaDB: (" . $this->mysqli->connect_errno . ") " . $this->mysqli->connect_error);
     }
 
     /** @var mysqli */
     public $mysqli = null;
 
-    public static function getInstance(string $alias = 'default'){
-        if (isset(self::$connections[$alias]))
-            return self::$connections[$alias];
-        throw new \Exception('DatabaseConnection instance with alias "' . $alias . '" not found');
+    public static function getInstance(string $alias = ''){
+        $dbAalias = ($alias == '') ? self::$defaultConnection : $alias;
+        if (isset($dbAalias))
+            return self::$connections[$dbAalias];
+        throw new \Exception('DatabaseConnection instance with alias "' . $dbAalias . '" not found');
     }
 
     // Turns autocommit on/off for transactions
