@@ -7,14 +7,38 @@ namespace supermysqli;
  */
 class DatabaseConnection
 {
+    /**
+     * @var array Configured connections
+     */
     private static $connections = [];
+
+    /**
+     * @var string Name of the default connection
+     */
     private static $defaultConnection = 'default';
 
-    public static function configConnection(string $host, string $dbName, string $user, string $password, string $alias = 'default'){
-        if (isset(self::$connections[$alias]))
+    /**
+     * Add a new database configuration
+     * The spected keys for the options array are:
+     * <ul>
+     * <li><b>host</b> Server name/IP address of the server</li>
+     * <li><b>db</b> The database name</li>
+     * <li><b>user</b> User to connect to the database</li>
+     * <li><b>password</b> The password to the given user</li>
+     * <li><b>alias</b> The alias to use for the connection. If no one is given, <tt>default</tt> is used.
+     * If just ONE connection is configured, that connection will be the default one</li>
+     * </ul>
+     * @param array $options Connections options
+     * @return void
+     */
+    public static function addConnection(array $options){
+        //string $host, string $dbName, string $user, string $password, string $alias = 'default'
+        if (isset(self::$connections[$options['alias']]))
             throw new Exception("Connection alias already exists");
 
-        self::$connections[$alias] = new DatabaseConnection($host, $dbName, $user, $password);
+        $alias = $options['alias'] ?? 'default';
+
+        self::$connections[$alias] = new DatabaseConnection($options['host'], $options['db'], $options['user'], $options['password']);
         if (count(self::$connections) == 1)
             self::$defaultConnection = $alias;
     }
@@ -27,35 +51,23 @@ class DatabaseConnection
     }
 
     /**
-     * conectar
-     * Metodo para conexion a base de datos
-     * Se deben completar los parametros para conexion
-     * @throws Exception
+     * Create and open a connection to a database.
+     * @param string $server Database server
+     * @param string $database Database name
+     * @param string $user User to log in into the server
+     * @param string $password Password for the user
+     * @return void
      */
     private function connect(string $server, string $database, string $user, string $password)
     {
         try {
-            $this->mysqli = new mysqli($server, $user, $password, $database);
+            $this->mysqli = new \mysqli($server, $user, $password, $database);
         }
         catch(Exception $e){
-            throw new Exception('Error conectando: ' . $e->getMessage() . "\n" . $server . ' -- ' . $database . ' - ' . $user . ' - ' . $password);
+            throw new Exception('Connection Error: ' . $e->getMessage() . "\n" . $server . ' -- ' . $database . ' - ' . $user . ' - ' . $password);
         }
         if ($this->mysqli->connect_errno)
-            throw new Exception("Fallo al conectar a MySQL: (" . $this->mysqli->connect_errno . ") " . $this->mysqli->connect_error);
-    }
-
-    // Close database connection
-    private function close()
-    {
-        if ($this->mysqli !== null){
-            $this->mysqli->close();
-        }
-    }
-
-    // Class deconstructor override
-    public function __destruct()
-    {
-        $this->close();
+            throw new Exception("Error connectin to MySQL/MariaDB: (" . $this->mysqli->connect_errno . ") " . $this->mysqli->connect_error);
     }
 
     /** @var mysqli */
