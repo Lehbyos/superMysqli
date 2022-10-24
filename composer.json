@@ -12,5 +12,10 @@
             "name": "Alejandro Sandoval Véjar",
             "email": "jano.sandoval.vejar@gmail.com"
         }
-    ]
+    ],
+    "autoload": {
+        "psr-4": {
+            "supermysqli\\": "src"
+        }
+    }
 }
