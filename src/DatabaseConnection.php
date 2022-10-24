@@ -34,7 +34,7 @@ class DatabaseConnection
     public static function addConnection(array $options){
         //string $host, string $dbName, string $user, string $password, string $alias = 'default'
         if (isset(self::$connections[$options['alias']]))
-            throw new Exception("Connection alias already exists");
+            throw new \Exception("Connection alias already exists");
 
         $alias = $options['alias'] ?? 'default';
 
@@ -64,10 +64,10 @@ class DatabaseConnection
             $this->mysqli = new \mysqli($server, $user, $password, $database);
         }
         catch(Exception $e){
-            throw new Exception('Connection Error: ' . $e->getMessage() . "\n" . $server . ' -- ' . $database . ' - ' . $user . ' - ' . $password);
+            throw new \Exception('Connection Error: ' . $e->getMessage() . "\n" . $server . ' -- ' . $database . ' - ' . $user . ' - ' . $password);
         }
         if ($this->mysqli->connect_errno)
-            throw new Exception("Error connectin to MySQL/MariaDB: (" . $this->mysqli->connect_errno . ") " . $this->mysqli->connect_error);
+            throw new \Exception("Error connectin to MySQL/MariaDB: (" . $this->mysqli->connect_errno . ") " . $this->mysqli->connect_error);
     }
 
     /** @var mysqli */
@@ -76,7 +76,7 @@ class DatabaseConnection
     public static function getInstance(string $alias = 'default'){
         if (isset(self::$connections[$alias]))
             return self::$connections[$alias];
-        throw new Exception('DatabaseConnection instance with alias "' . $alias . '" not found');
+        throw new \Exception('DatabaseConnection instance with alias "' . $alias . '" not found');
     }
 
     // Turns autocommit on/off for transactions
@@ -147,15 +147,15 @@ class DatabaseConnection
     {
         $stmt = $this->mysqli->prepare($sql);
         if ($stmt === false)
-            throw new Exception('No se pudo preparar consulta de datos: ' . $this->mysqli->error);
+            throw new \Exception('No se pudo preparar consulta de datos: ' . $this->mysqli->error);
 
         if (($params !== null) && (count($params) > 0)) {
             $queryParameters = $this->processParameters($params);
             if (call_user_func_array([$stmt, 'bind_param'], $queryParameters) === false)
-                throw new Exception('No se pudo asignar parámetros');
+                throw new \Exception('No se pudo asignar parámetros');
         }
         if ($stmt->execute() === false)
-            throw new Exception('Error ejecutando consulta: ' . $this->mysqli->error);
+            throw new \Exception('Error ejecutando consulta: ' . $this->mysqli->error);
 
         if ($format !== null){
             $formatFunction = is_callable($format);
@@ -203,15 +203,15 @@ class DatabaseConnection
     {
         $stmt = $this->mysqli->prepare($sql);
         if ($stmt === false)
-            throw new Exception('No se pudo preparar consulta de datos');
+            throw new \Exception('No se pudo preparar consulta de datos');
 
         if (($params !== null) && (count($params) > 0)) {
             $queryParameters = $this->processParameters($params);
             if (call_user_func_array([$stmt, 'bind_param'], $queryParameters) === false)
-                throw new Exception('No se pudo asignar parámetros');
+                throw new \Exception('No se pudo asignar parámetros');
         }
         if ($stmt->execute() === false)
-            throw new Exception('Error ejecutando consulta: ' . $this->mysqli->error);
+            throw new \Exception('Error ejecutando consulta: ' . $this->mysqli->error);
 
         if ($format !== null){
             $formatFunction = is_callable($format);
@@ -250,19 +250,19 @@ class DatabaseConnection
     {
         $stmt = $this->mysqli->prepare($sql);
         if ($stmt === false)
-            throw new Exception('No se pudo preparar consulta de datos: ' . $this->mysqli->error);
+            throw new \Exception('No se pudo preparar consulta de datos: ' . $this->mysqli->error);
 
         if (($params !== null) && (count($params) > 0)) {
             if (call_user_func_array([$stmt, 'bind_param'], $this->processParameters($params)) === false)
-                throw new Exception('No se pudo asignar parámetros');
+                throw new \Exception('No se pudo asignar parámetros');
         }
         if ($stmt->execute() === false)
-            throw new Exception('Error ejecutando consulta: ' . $this->mysqli->error);
+            throw new \Exception('Error ejecutando consulta: ' . $this->mysqli->error);
 
         $result = $stmt->get_result();
         if ($result === false) {
             $stmt->close();
-            throw new Exception('Error obteniendo resultado: ' . $stmt->error);
+            throw new \Exception('Error obteniendo resultado: ' . $stmt->error);
         }
 
         $row = $result->fetch_array(MYSQLI_NUM);
@@ -271,7 +271,7 @@ class DatabaseConnection
         $result->close();
         $stmt->close();
         if (!isset($resp))
-            throw new Exception('Error: resultado obtenido no es válido');
+            throw new \Exception('Error: resultado obtenido no es válido');
         return $resp;
     }
 
@@ -286,11 +286,11 @@ class DatabaseConnection
     {
         $stmt = $this->mysqli->Prepare($sql);
         if ($stmt === false)
-            throw new Exception('No se pudo preparar consulta de datos: ' . $this->mysqli->error);
+            throw new \Exception('No se pudo preparar consulta de datos: ' . $this->mysqli->error);
         if (call_user_func_array([$stmt, 'bind_param'], $this->processParameters($params)) === false)
-            throw new Exception('No se pudo asignar parámetros');
+            throw new \Exception('No se pudo asignar parámetros');
         if ($stmt->execute() === false)
-            throw new Exception('Error ejecutando consulta: ' . $this->mysqli->error);
+            throw new \Exception('Error ejecutando consulta: ' . $this->mysqli->error);
 
         $resp = $stmt->affected_rows;
         $stmt->close();
@@ -311,11 +311,11 @@ class DatabaseConnection
     public function executeBatchQuery(string $sql, array $params): array
     {
         if (($params === null) || (!is_array($params)))
-            throw new Exception('Ejecución en lote DEBE tener parámetros');
+            throw new \Exception('Ejecución en lote DEBE tener parámetros');
 
         $stmt = $this->mysqli->prepare($sql);
         if ($stmt === false)
-            throw new Exception('No se pudo preparar consulta de datos');
+            throw new \Exception('No se pudo preparar consulta de datos');
 
         $resultados = [];
 
@@ -394,16 +394,16 @@ class DatabaseConnection
 
         $stmt = $this->mysqli->prepare($sql);
         if ($stmt->prepare($sql) === false)
-            throw new Exception('No se pudo preparar consulta de datos: ' . $stmt->error);
+            throw new \Exception('No se pudo preparar consulta de datos: ' . $stmt->error);
 
         if (($params !== null) && (count($params) > 0)) {
             $queryParameters = $this->processParameters($params);
             if (call_user_func_array([$stmt, 'bind_param'], $queryParameters) === false)
-                throw new Exception('No se pudo asignar parámetros');
+                throw new \Exception('No se pudo asignar parámetros');
         }
 
         if ($stmt->execute() === false)
-            throw new Exception("Error ejecutando procedimiento $name: " . $stmt->error);
+            throw new \Exception("Error ejecutando procedimiento $name: " . $stmt->error);
 
         $resp = [];
         $result = $stmt->get_result();
@@ -459,16 +459,16 @@ class DatabaseConnection
 
         $stmt = $this->mysqli->prepare($sql);
         if ($stmt->prepare($sql) === false)
-            throw new Exception('No se pudo preparar consulta de datos: ' . $stmt->error);
+            throw new \Exception('No se pudo preparar consulta de datos: ' . $stmt->error);
 
         if (($params !== null) && (count($params) > 0)) {
             $queryParameters = $this->processParameters($params);
             if (call_user_func_array([$stmt, 'bind_param'], $queryParameters) === false)
-                throw new Exception('No se pudo asignar parámetros');
+                throw new \Exception('No se pudo asignar parámetros');
         }
 
         if ($stmt->execute() === false)
-            throw new Exception("Error ejecutando procedimiento $sp_name: " . $stmt->error);
+            throw new \Exception("Error ejecutando procedimiento $sp_name: " . $stmt->error);
 
         //ojo
         $resp = new stdClass();
@@ -482,7 +482,7 @@ class DatabaseConnection
         $result = $stmt->get_result();
 
         if ($result === false)
-            throw new Exception("Error obteniendo resultado(1) de procedimiento $sp_name: " . $stmt->error);
+            throw new \Exception("Error obteniendo resultado(1) de procedimiento $sp_name: " . $stmt->error);
 
         while ($row = $result->fetch_array(MYSQLI_NUM)) {
             if ($formatFunction) {
@@ -537,16 +537,16 @@ class DatabaseConnection
 
         $stmt = $this->mysqli->prepare($sql);
         if ($stmt->prepare($sql) === false)
-            throw new Exception('No se pudo preparar consulta de datos: ' . $stmt->error);
+            throw new \Exception('No se pudo preparar consulta de datos: ' . $stmt->error);
 
         if (($params !== null) && (count($params) > 0)) {
             $queryParameters = $this->processParameters($params);
             if (call_user_func_array([$stmt, 'bind_param'], $queryParameters) === false)
-                throw new Exception('No se pudo asignar parámetros');
+                throw new \Exception('No se pudo asignar parámetros');
         }
 
         if ($stmt->execute() === false)
-            throw new Exception("Error ejecutando procedimiento $sp_name: " . $stmt->error);
+            throw new \Exception("Error ejecutando procedimiento $sp_name: " . $stmt->error);
 
         //ojo
         $resp = new stdClass();
@@ -560,7 +560,7 @@ class DatabaseConnection
         $result = $stmt->get_result();
 
         if ($result === false)
-            throw new Exception("Error obteniendo resultado(1) de procedimiento $sp_name: " . $stmt->error);
+            throw new \Exception("Error obteniendo resultado(1) de procedimiento $sp_name: " . $stmt->error);
 
         while ($row = $result->fetch_object()) {
             if ($formatFunction) {
@@ -598,15 +598,15 @@ class DatabaseConnection
     {
         $stmt = $this->mysqli->prepare($sql);
         if ($stmt === false)
-            throw new Exception('No se pudo preparar consulta de datos: ' . $this->mysqli->error);
+            throw new \Exception('No se pudo preparar consulta de datos: ' . $this->mysqli->error);
 
         if (($params !== null) && (count($params) > 0)){
             $queryParameters = $this->processParameters($params);
             if (call_user_func_array([$stmt, 'bind_param'], $queryParameters) === false)
-                throw new Exception('No se pudo asignar parámetros');
+                throw new \Exception('No se pudo asignar parámetros');
         }
         if ($stmt->execute() === false)
-            throw new Exception('Error ejecutando consulta: ' . $this->mysqli->error);
+            throw new \Exception('Error ejecutando consulta: ' . $this->mysqli->error);
 
         $resp = [];
         $result = $stmt->get_result();
