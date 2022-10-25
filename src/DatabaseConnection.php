@@ -2,6 +2,7 @@
 
 namespace SuperMysqli;
 
+use http\Exception\InvalidArgumentException;
 use SuperMysqli\Exceptions;
 
 /**
@@ -37,10 +38,10 @@ class DatabaseConnection
      */
     public static function addConnection(array $options){
         //string $host, string $dbName, string $user, string $password, string $alias = 'default'
-        if (isset(self::$connections[$options['alias']]))
-            throw new \Exception("Connection alias already exists");
-
         $alias = $options['alias'] ?? 'default';
+
+        if (isset(self::$connections[$options['alias']]))
+            throw new Exceptions\AliasAlreadyDefinedException($alias);
 
         self::$connections[$alias] = new DatabaseConnection($options['host'], $options['db'], $options['user'], $options['password']);
         if (count(self::$connections) == 1)
@@ -49,7 +50,7 @@ class DatabaseConnection
 
     /**
      * Initialize a new connection
-     * @throws Exception
+     * @throws Exceptions\ConnectionException
      */
     private function __construct(string $host, string $dbName, string $user, string $password){
         $this->connect($host, $dbName, $user, $password);
@@ -62,6 +63,7 @@ class DatabaseConnection
      * @param string $user User to log in into the server
      * @param string $password Password for the user
      * @return void
+     * @throws Exceptions\ConnectionException If connection cannot be established with the database
      */
     private function connect(string $server, string $database, string $user, string $password)
     {
@@ -85,10 +87,10 @@ class DatabaseConnection
      * @throws \Exception If there is no configured connection with the given alias
      */
     public static function getInstance(string $alias = ''): ?DatabaseConnection{
-        $dbAalias = ($alias == '') ? self::$defaultConnection : $alias;
-        if (isset($dbAalias))
-            return self::$connections[$dbAalias];
-        throw new \Exception('DatabaseConnection instance with alias "' . $dbAalias . '" not found');
+        $dbAlias = ($alias == '') ? self::$defaultConnection : $alias;
+        if (isset($dbAlias))
+            return self::$connections[$dbAlias];
+        throw new Exceptions\AliasNotFoundException($dbAlias);
     }
 
     /**
@@ -164,6 +166,26 @@ class DatabaseConnection
     }
 
     /**
+     * Prepares and bind the parameters of a SQL statement.
+     * @param string $sql The SQL statement to execute
+     * @param array|null $params Query parameters
+     * @return \mysqli_stmt Prepared statement, with bound parameters (if any), ready to be executed.
+     * @throws Exceptions\BindingParameterException
+     * @throws Exceptions\PreparationException
+     */
+    protected function createPreparedStatement(string $sql, ?array $params = null): \mysqli_stmt{
+        $stmt = $this->mysqli->prepare($sql);
+        if ($stmt === false)
+            throw new Exceptions\PreparationException($this->mysqli->error, $this->mysqli->errno);
+
+        if (($params !== null) && (count($params) > 0)) {
+            if (call_user_func_array([$stmt, 'bind_param'], $this->processParameters($params)) === false)
+                throw new Exceptions\BindingParameterException($this->mysqli->error, $this->mysqli->errno);
+        }
+        return $stmt;
+    }
+
+    /**
      * Executes an SQL statement returning data.
      * Every data row will be returned as an <b>object</b>, where each attribute is a data field.
      * @param string $sql SQL Statement
@@ -176,19 +198,12 @@ class DatabaseConnection
      * @return array Data returned by the query. Empty if there is no data.
      * @throws \Exception If SQL cannot be prepared or executed.
      */
-    public function selectQuery(string $sql, $params = null, $format = null): array
+    public function selectQuery(string $sql, ?array $params = null, $format = null): array
     {
-        $stmt = $this->mysqli->prepare($sql);
-        if ($stmt === false)
-            throw new \Exception('SQL Statement cannot be prepared: ' . $this->mysqli->error);
+        $stmt = $this->createPreparedStatement($sql, $params);
 
-        if (($params !== null) && (count($params) > 0)) {
-            $queryParameters = $this->processParameters($params);
-            if (call_user_func_array([$stmt, 'bind_param'], $queryParameters) === false)
-                throw new \Exception('Parameters could not be assigned');
-        }
         if ($stmt->execute() === false)
-            throw new \Exception('Error executing statement: ' . $this->mysqli->error);
+            throw new Exceptions\ExecuteStatementException($this->mysqli->error, $this->mysqli->errno);
 
         if ($format !== null){
             $formatFunction = is_callable($format);
@@ -199,6 +214,8 @@ class DatabaseConnection
 
         $resp = [];
         $result = $stmt->get_result();
+        if ($result === false)
+            throw new Exceptions\NoResultException($this->mysqli->error, $this->mysqli->errno);
 
         while ($row = $result->fetch_object()) {
             if ($formatFunction) {
@@ -225,21 +242,16 @@ class DatabaseConnection
      * @param array|null $params SQL statement parameters.
      * @param array|callable|null $format Format for the data row, as in {@link selectQuery}
      * @return object|null The data result, <tt>null</tt> if there is no data.
-     * @throws Exception
+     * @throws Exceptions\BindingParameterException
+     * @throws Exceptions\PreparationException
+     * @throws Exceptions\ExecuteStatementException
+     * @throws Exceptions\NoResultException
      */
-    public function singleRowQuery(string $sql, ?array $params = null,  $format = null): ?object
+    public function singleRowQuery(string $sql, ?array $params = null, $format = null): ?object
     {
-        $stmt = $this->mysqli->prepare($sql);
-        if ($stmt === false)
-            throw new \Exception('No se pudo preparar consulta de datos');
-
-        if (($params !== null) && (count($params) > 0)) {
-            $queryParameters = $this->processParameters($params);
-            if (call_user_func_array([$stmt, 'bind_param'], $queryParameters) === false)
-                throw new \Exception('No se pudo asignar parámetros');
-        }
+        $stmt = $this->createPreparedStatement($sql, $params);
         if ($stmt->execute() === false)
-            throw new \Exception('Error ejecutando consulta: ' . $this->mysqli->error);
+            throw new Exceptions\ExecuteStatementException($this->mysqli->error, $this->mysqli->errno);
 
         if ($format !== null){
             $formatFunction = is_callable($format);
@@ -249,8 +261,10 @@ class DatabaseConnection
         }
 
         $result = $stmt->get_result();
-        $resp = $result->fetch_object();
+        if ($result === false)
+            throw new Exceptions\NoResultException($this->mysqli->error, $this->mysqli->errno);
 
+        $resp = $result->fetch_object();
         $result->close();
         $stmt->close();
 
@@ -268,29 +282,25 @@ class DatabaseConnection
     }
 
     /**
-     * Ejecuta (y obtiene resultado) de una consulta que retorna un único valor (select de un campo, select count(), etc).
-     * @param mixed $sql Sentencia SQL a ejecutar.
-     * @param mixed|null $params Array de parámetros para ejecutar la consulta, <code>null</code>si no los necesita.
-     * @return mixed Valor de respuesta de la consulta.
-     * @throws Exception Si no puede prepararse consulta, si no puede ejecutarse.
+     * Get data from a query with return a single value instead of multiple columns and rows.
+     * This method gets the value of the first column of the first row of data. If the query gets more columns/rows,
+     * they will be ignored.
+     * @param string $sql SQL Statement
+     * @param array|null $params Params required by the query (if any)
+     * @return mixed The value returned by the SQL statement.
+     * @throws Exceptions\BindingParameterException
+     * @throws Exceptions\PreparationException
      */
-    public function singleValueQuery($sql, $params = null)
+    public function singleValueQuery(string $sql, array $params = null): mixed
     {
-        $stmt = $this->mysqli->prepare($sql);
-        if ($stmt === false)
-            throw new \Exception('No se pudo preparar consulta de datos: ' . $this->mysqli->error);
-
-        if (($params !== null) && (count($params) > 0)) {
-            if (call_user_func_array([$stmt, 'bind_param'], $this->processParameters($params)) === false)
-                throw new \Exception('No se pudo asignar parámetros');
-        }
+        $stmt = $this->createPreparedStatement($sql, $params);
         if ($stmt->execute() === false)
-            throw new \Exception('Error ejecutando consulta: ' . $this->mysqli->error);
+            throw new Exceptions\ExecuteStatementException($this->mysqli->error, $this->mysqli->errno);
 
         $result = $stmt->get_result();
         if ($result === false) {
             $stmt->close();
-            throw new \Exception('Error obteniendo resultado: ' . $stmt->error);
+            throw new Exceptions\NoResultException($this->mysqli->error, $this->mysqli->errno);
         }
 
         $row = $result->fetch_array(MYSQLI_NUM);
@@ -299,26 +309,26 @@ class DatabaseConnection
         $result->close();
         $stmt->close();
         if (!isset($resp))
-            throw new \Exception('Error: resultado obtenido no es válido');
+            throw new Exceptions\InvalidResultException($this->mysqli->error, $this->mysqli->errno);
+
         return $resp;
     }
 
     /**
-     * Ejecuta sentencia que no entrega datos (como insert, update, delete)
-     * @param mixed $sql Sentencia a ejecutar
-     * @param array|null $params Parámetros requeridos por la consulta
-     * @return int Número de filas afectadas.
-     * @throws Exception Si hay problemas en la ejecución del SQL (preparación, asociación de parámtros o ejecución)
+     * Executes a query.
+     * This method is designed for queries that not return data, but the number of rows that it affected.
+     * @param string $sql SQL statement.
+     * @param array|null $params Parameters for the statement (if any)
+     * @return int Affected rows
+     * @throws Exceptions\BindingParameterException
+     * @throws Exceptions\ExecuteStatementException
+     * @throws Exceptions\PreparationException
      */
-    public function executeQuery($sql, $params = null): int
+    public function executeQuery(string $sql, array $params = null): int
     {
-        $stmt = $this->mysqli->Prepare($sql);
-        if ($stmt === false)
-            throw new \Exception('No se pudo preparar consulta de datos: ' . $this->mysqli->error);
-        if (call_user_func_array([$stmt, 'bind_param'], $this->processParameters($params)) === false)
-            throw new \Exception('No se pudo asignar parámetros');
+        $stmt = $this->createPreparedStatement($sql, $params);
         if ($stmt->execute() === false)
-            throw new \Exception('Error ejecutando consulta: ' . $this->mysqli->error);
+            throw new Exceptions\ExecuteStatementException($this->mysqli->error, $this->mysqli->errno);
 
         $resp = $stmt->affected_rows;
         $stmt->close();
@@ -326,51 +336,58 @@ class DatabaseConnection
     }
 
     /**
-     * Método para ejecución "por lote" (ejecutar varias veces la misma consulta, con datos diferentess).
-     * El resultado es un array de objetos de resultado, donde cada uno de estos tiene las siguientes propiedades:
-     * - $index : Índice dentro de $params donde estaba el dato
-     * - $status: Estado de la ejecución; puede ser OK o ERROR.
-     * - $msg   : Descripción. Si $status es OK, indica número de filas afectadas; si es ERROR, el mensaje de error entregado por la base de datos.
-     * @param string $sql Sentencia SQL a ejecutar.
-     * @param array $params Matriz con datos. Cada fila es un arreglo con los parámetros que requiere sentencia SQL.
-     * @return array Arreglo con detalle de las respuestas.
-     * @throws Exception Si no se indican parámetros o no es una matriz, y si no puede analizarse el SQL.
+     * Call a stored procedure.
+     * The procedure must return data (do SELECT queries), returning that data.
+     * @param string $name Name of the procedure to call
+     * @param array|null $params Parameters to the procedure
+     * @param array|callable|null $format Format for the returned data (like in {@link selectQuery})
+     * @return array Data obtained from the database.
+     * @throws Exceptions\BindingParameterException
+     * @throws Exceptions\ExecuteStatementException
+     * @throws Exceptions\PreparationException
      */
-    public function executeBatchQuery(string $sql, array $params): array
-    {
-        if (($params === null) || (!is_array($params)))
-            throw new \Exception('Ejecución en lote DEBE tener parámetros');
-
-        $stmt = $this->mysqli->prepare($sql);
-        if ($stmt === false)
-            throw new \Exception('No se pudo preparar consulta de datos');
-
-        $resultados = [];
-
-        foreach ($params as $index => $ejecuciones) {
-            $res = new stdClass;
-            $res->index = $index;
-            $res->status = '';
-            $res->msg = '';
-
-            if (call_user_func_array([$stmt, 'bind_param'], $this->processParameters($ejecuciones)) === false) {
-                $res->status = 'ERROR';
-                $res->msg = 'Error en binding de parámetros: ' . $stmt->error;
-            } else {
-                $filas = $stmt->execute();
-                if ($filas === false) {
-                    $res->status = 'ERROR';
-                    $res->msg = 'Error de ejecución: ' . $stmt->error;
-                } else {
-                    $res->status = 'OK';
-                    $res->msg = true;
-                }
+    public function callStoredProcedure(string $name, ?array $params = null, $format = null): array{
+        $sql = 'call ' . $name . '(';
+        if ($params !== null) {
+            $last = count($params) - 1;
+            foreach ($params as $index => $param) {
+                $sql .= '?';
+                if ($index < $last)
+                    $sql .= ', ';
             }
-            $resultados[] = $res;
+        }
+        $sql .= ')';
+
+        $stmt = $this->createPreparedStatement($sql, $params);
+        if ($stmt->execute() === false)
+            throw new Exceptions\ExecuteStatementException('Error executing stored procedure: ' . $this->mysqli->error, $this->mysqli->errno);
+
+        $resp = [];
+        $result = $stmt->get_result();
+
+        if ($format !== null){
+            $formatFunction = is_callable($format);
+            $toUtfFields = is_array($format);
+        } else {
+            $formatFunction = $toUtfFields = false;
         }
 
+        while ($row = $result->fetch_object()) {
+            if ($formatFunction) {
+                $resp[] = $format($row);
+            } else if ($toUtfFields) {
+                foreach ($format as $field) {
+                    $row->$field = utf8_encode($row->$field);
+                }
+                $resp[] = $row;
+            } else
+                $resp[] = $row;
+        }
+
+        $result->close();
         $stmt->close();
-        return $resultados;
+
+        return $resp;
     }
 
     /**
@@ -401,65 +418,7 @@ class DatabaseConnection
         return $resp;
     }
 
-    /**
-     * @param string $name
-     * @param array|null $params
-     * @param array|callable|null $format
-     * @return array
-     * @throws Exception
-     */
-    public function callStoredProcedure(string $name, ?array $params = null, $format = null): array{
-        $sql = 'call ' . $name . '(';
-        if ($params !== null) {
-            $last = count($params) - 1;
-            foreach ($params as $index => $param) {
-                $sql .= '?';
-                if ($index < $last)
-                    $sql .= ', ';
-            }
-        }
-        $sql .= ')';
 
-        $stmt = $this->mysqli->prepare($sql);
-        if ($stmt->prepare($sql) === false)
-            throw new \Exception('No se pudo preparar consulta de datos: ' . $stmt->error);
-
-        if (($params !== null) && (count($params) > 0)) {
-            $queryParameters = $this->processParameters($params);
-            if (call_user_func_array([$stmt, 'bind_param'], $queryParameters) === false)
-                throw new \Exception('No se pudo asignar parámetros');
-        }
-
-        if ($stmt->execute() === false)
-            throw new \Exception("Error ejecutando procedimiento $name: " . $stmt->error);
-
-        $resp = [];
-        $result = $stmt->get_result();
-
-        if ($format !== null){
-            $formatFunction = is_callable($format);
-            $toUtfFields = is_array($format);
-        } else {
-            $formatFunction = $toUtfFields = false;
-        }
-
-        while ($row = $result->fetch_array(MYSQLI_NUM)) {
-            if ($formatFunction) {
-                $resp[] = $format($row);
-            } else if ($toUtfFields) {
-                foreach ($format as $field) {
-                    $row->$field = utf8_encode($row[$field]);
-                }
-                $resp[] = $row;
-            } else
-                $resp[] = $row;
-        }
-
-        $result->close();
-        $stmt->close();
-
-        return $resp;
-    }
 
     /**
      * Obtiene objeto de respuesta para DataTables, obteniendo todos los datos desde un procedimiento almacenado.
