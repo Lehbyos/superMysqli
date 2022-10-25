@@ -2,6 +2,8 @@
 
 namespace SuperMysqli;
 
+use SuperMysqli\Exceptions;
+
 /**
  * Wrapper and enhancer to a mysqli database connection.
  * This class also acts like a kind of connection factory, allowing to manage
@@ -67,7 +69,7 @@ class DatabaseConnection
             $this->mysqli = new \mysqli($server, $user, $password, $database);
         }
         catch(Exception $e){
-            throw new \Exception('Connection Error: ' . $e->getMessage() . "\n" . $server . ' -- ' . $database . ' - ' . $user . ' - ' . $password);
+            throw new Exceptions\ConnectionException($server, $user, $password, $database, $e->getMessage());
         }
         if ($this->mysqli->connect_errno)
             throw new \Exception("Error connecting to MySQL/MariaDB: (" . $this->mysqli->connect_errno . ") " . $this->mysqli->connect_error);
@@ -82,7 +84,7 @@ class DatabaseConnection
      * @return DatabaseConnection Get connection instance.
      * @throws \Exception If there is no configured connection with the given alias
      */
-    public static function getInstance(string $alias = ''): DatabaseConnection{
+    public static function getInstance(string $alias = ''): ?DatabaseConnection{
         $dbAalias = ($alias == '') ? self::$defaultConnection : $alias;
         if (isset($dbAalias))
             return self::$connections[$dbAalias];
