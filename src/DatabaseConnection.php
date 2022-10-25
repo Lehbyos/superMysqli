@@ -72,7 +72,7 @@ class DatabaseConnection
             throw new Exceptions\ConnectionException($server, $user, $password, $database, $e->getMessage());
         }
         if ($this->mysqli->connect_errno)
-            throw new \Exception("Error connecting to MySQL/MariaDB: (" . $this->mysqli->connect_errno . ") " . $this->mysqli->connect_error);
+            throw new Exceptions\ConnectionException($server, $user, $password, $database, $this->mysqli->connect_error);
     }
 
     /** @var \mysqli mysqli connection to the database  */
