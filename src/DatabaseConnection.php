@@ -3,7 +3,9 @@
 namespace SuperMysqli;
 
 /**
- *
+ * Wrapper and enhancer to a mysqli database connection.
+ * This class also acts like a kind of connection factory, allowing to manage
+ * multiple of them, identified by an alias.
  */
 class DatabaseConnection
 {
@@ -44,6 +46,7 @@ class DatabaseConnection
     }
 
     /**
+     * Initialize a new connection
      * @throws Exception
      */
     private function __construct(string $host, string $dbName, string $user, string $password){
@@ -70,35 +73,60 @@ class DatabaseConnection
             throw new \Exception("Error connecting to MySQL/MariaDB: (" . $this->mysqli->connect_errno . ") " . $this->mysqli->connect_error);
     }
 
-    /** @var mysqli */
-    public $mysqli = null;
+    /** @var \mysqli mysqli connection to the database  */
+    private $mysqli = null;
 
-    public static function getInstance(string $alias = ''){
+    /**
+     * Gets the database connection with the given alias.
+     * @param string $alias Alias of the connection. No alias is required if there is only one configured connection
+     * @return DatabaseConnection Get connection instance.
+     * @throws \Exception If there is no configured connection with the given alias
+     */
+    public static function getInstance(string $alias = ''): DatabaseConnection{
         $dbAalias = ($alias == '') ? self::$defaultConnection : $alias;
         if (isset($dbAalias))
             return self::$connections[$dbAalias];
         throw new \Exception('DatabaseConnection instance with alias "' . $dbAalias . '" not found');
     }
 
-    // Turns autocommit on/off for transactions
-    public function autoCommit($mode)
+    /**
+     * Sets the autocommit mode.
+     * Set this to <tt>true</tt> begins a new transaction that can be confirmed with {@link commit()} or canceled with {@link rollback()}
+     * @param bool $state Autocommit state
+     * @return void
+     */
+    public function autoCommit(bool $state = true): void
     {
-        $this->mysqli->autocommit($mode);
+        $this->mysqli->autocommit($state);
     }
 
-    // Commits transaction
-    public function Commit()
+    /**
+     * Confirm/Commit a started transaction.
+     * Once commited, the autoCommit state will be set to <tt>false</tt>
+     * @return void
+     */
+    public function commit()
     {
         $this->mysqli->commit();
+        $this->mysqli->autocommit(false);
     }
 
-    // Rollbacks transaction
-    public function Rollback()
+    /**
+     * Cancel/Rollback a started transaction.
+     * Once rolled back, the autoCommit state will be set to <tt>false</tt>
+     * @return void
+     */
+    public function rollback()
     {
         $this->mysqli->rollback();
+        $this->mysqli->autocommit(false);
     }
 
-    // Get the last insert id
+    /**
+     * Gets the last generated value for an AUTO_INCREMENT column by the last query
+     * @return mixed The value of the AUTO_INCREMENT field that was updated by the previous query.
+     * Returns zero if there was no previous query on the connection or if the query did not update an AUTO_INCREMENT value
+     */
     public function lastID()
     {
         return $this->mysqli->insert_id;
@@ -134,29 +162,31 @@ class DatabaseConnection
     }
 
     /**
-     * Ejecuta sentencia SQL para obtener datos.
-     * Este método devuelve cada fila como un OBJETO, donde cada campo de la consulta es obtenido como atributo.
-     * @param string $sql SQL a ejecutar
-     * @param array|null $params Parámetros requeridos por la consulta (arreglo con los valores)
-     * @param array|callable|null $format Campos obtenidos de la consulta que deben ser codificados en utf8 (utf_encode), o función de formateo. Esta
-     * función recibe como único parámetro la fila obtenida del SQL (convertida a objeto), y debe retornar el objeto debidamente formateado (con campos
-     * codificados en UTF-8, con más campos, etc).
-     * @return array Datos retornados por la consulta; puede ser array vacío si no hay datos.
-     * @throws Exception Si hay problemas en la ejecución del SQL (preparación, asociación de parámtros o ejecución)
+     * Executes an SQL statement returning data.
+     * Every data row will be returned as an <b>object</b>, where each attribute is a data field.
+     * @param string $sql SQL Statement
+     * @param array|null $params SQL statement parameters (if any)
+     * @param array|callable|null $format Format for each data row.
+     * <ul>
+     * <li>If it is an array, contains a list of data columns that will be {@link utf8_encode()}'d.</li>
+     * <li>If a callable, it will receive the data row object and return the formatted version of it. No return data will generate empty results.</li>
+     * </ul>
+     * @return array Data returned by the query. Empty if there is no data.
+     * @throws \Exception If SQL cannot be prepared or executed.
      */
     public function selectQuery(string $sql, $params = null, $format = null): array
     {
         $stmt = $this->mysqli->prepare($sql);
         if ($stmt === false)
-            throw new \Exception('No se pudo preparar consulta de datos: ' . $this->mysqli->error);
+            throw new \Exception('SQL Statement cannot be prepared: ' . $this->mysqli->error);
 
         if (($params !== null) && (count($params) > 0)) {
             $queryParameters = $this->processParameters($params);
             if (call_user_func_array([$stmt, 'bind_param'], $queryParameters) === false)
-                throw new \Exception('No se pudo asignar parámetros');
+                throw new \Exception('Parameters could not be assigned');
         }
         if ($stmt->execute() === false)
-            throw new \Exception('Error ejecutando consulta: ' . $this->mysqli->error);
+            throw new \Exception('Error executing statement: ' . $this->mysqli->error);
 
         if ($format !== null){
             $formatFunction = is_callable($format);
@@ -185,19 +215,14 @@ class DatabaseConnection
     }
 
     /**
-     * Retorna sólo una fila de un conjunto de resultados.
-     * Por defecto, este método devolverá el primer registro obtenido del conjunto de datos; si no hay datos, el
-     * método retornará <tt>null</tt>
-     * @param string $sql Sentencia SQL a ejecutar para obtener datos.
-     * @param array|null $params Parámetros (opcionales) de la sentencia SQL.
-     * @param array|callable|null $format Opcional, formato a realizar en el objeto respuesta.
-     * <ul>
-     * <li>Si es un array, tendrá los nombres de campos a convertir con utf8_encode.
-     * <li>Si es callable, será una función que recibe como parámetro el objeto a convertir, y retornará dicho objeto
-     * con el formato que se requiera.</li>
-     * </ul>
-     *
-     * @return object|null Primer registro del conjunto de datos, <tt>null</tt> si no hay datos de respuesta.
+     * Returns one result row of a SQL query.
+     * If the given query return more than one result, this method will return the first data row, and return <tt>null</tt> if
+     * there is no data.
+     * As in {@link selectQuery()}, the data row will be converted to an object.
+     * @param string $sql SQL Statement.
+     * @param array|null $params SQL statement parameters.
+     * @param array|callable|null $format Format for the data row, as in {@link selectQuery}
+     * @return object|null The data result, <tt>null</tt> if there is no data.
      * @throws Exception
      */
     public function singleRowQuery(string $sql, ?array $params = null,  $format = null): ?object
